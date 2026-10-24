@@ -8,3 +8,11 @@ Web app a file singolo (`index.html`) per value betting calcistico e analisi in-
 - Calcolatore EV / Kelly frazionario, AI Scout (modello di Poisson), tracker scommesse
 
 Pubblicata con GitHub Pages dal branch `main`.
+
+## Proxy CORS (necessario su GitHub Pages)
+
+football-data.org non accetta chiamate dal browser su domini pubblici. Pubblica `cloudflare-worker.js` come Cloudflare Worker (gratuito), poi nell'app imposta come proxy personalizzato:
+
+```
+https://<nome-worker>.<account>.workers.dev/?url={url}
+```

@@ -118,7 +118,7 @@ tailwind.config = {
       </div>
       <div id="cfgMsg" class="mt-3 text-xs mono text-term-mute min-h-[1rem]"></div>
       <p class="mt-2 text-[11px] text-term-mute leading-relaxed">
-        <i class="fa-solid fa-circle-info"></i> La chiave resta solo nel <span class="mono">localStorage</span> di questo browser. In modalità Auto l'app prova prima la chiamata diretta (football-data.org abilita il CORS), poi corsproxy.io, poi il tuo proxy. I proxy "solo GET" come allorigins.win non inoltrano l'header <span class="mono">X-Auth-Token</span> e quindi non sono utilizzabili per le chiamate autenticate. Se nulla risponde, l'app passa ai dati DEMO senza bloccarsi.
+        <i class="fa-solid fa-circle-info"></i> La chiave resta solo nel <span class="mono">localStorage</span> di questo browser. Da GitHub Pages la chiamata diretta e corsproxy.io (gratuito solo su localhost) vengono bloccate dal CORS: usa il tuo proxy Cloudflare Worker (file <span class="mono">cloudflare-worker.js</span> nel repo). In modalità Auto l'app prova prima il tuo proxy, poi la chiamata diretta, poi corsproxy.io. I proxy "solo GET" come allorigins.win non inoltrano l'header <span class="mono">X-Auth-Token</span> e quindi non sono utilizzabili per le chiamate autenticate. Se nulla risponde, l'app passa ai dati DEMO senza bloccarsi.
       </p>
     </div>
   </section>
@@ -306,7 +306,7 @@ function proxyOrder() {
   const mode = store.get(K.proxy, 'auto');
   if (mode !== 'auto') return [mode];
   const order = ['direct', 'corsproxy'];
-  if ((store.get(K.custom, '') || '').trim()) order.push('custom');
+  if ((store.get(K.custom, '') || '').trim()) order.unshift('custom');
   const last = store.get(K.lastProxy, null);
   if (last && order.includes(last)) { order.splice(order.indexOf(last), 1); order.unshift(last); }
   return order;
