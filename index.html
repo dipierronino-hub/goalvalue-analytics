@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<title>GoalValue Analytics Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: { mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'], sans: ['Inter', 'system-ui', 'sans-serif'] },
+      colors: {
+        term: { bg: '#07090d', panel: '#0d1117', line: '#1c2330', mute: '#7d8590', text: '#e6edf3' },
+        up: '#22c55e', down: '#ef4444', amber: '#f59e0b', cyan: '#22d3ee'
+      }
+    }
+  }
+};
+</script>
+<style>
+  html, body { background: #07090d; color: #e6edf3; }
+  body { font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+  .panel { background: #0d1117; border: 1px solid #1c2330; border-radius: 12px; }
+  .panel-h { border-bottom: 1px solid #1c2330; }
+  .inp { background: #07090d; border: 1px solid #1c2330; border-radius: 8px; padding: .6rem .75rem; width: 100%; font-family: "JetBrains Mono", monospace; font-size: 16px; color: #e6edf3; outline: none; }
+  .inp:focus { border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34,211,238,.15); }
+  .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: #7d8590; margin-bottom: .3rem; display: block; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 42px; padding: 0 .95rem; border-radius: 8px; font-weight: 600; font-size: .85rem; transition: filter .15s, transform .05s; white-space: nowrap; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-pri { background: #22d3ee; color: #031015; }
+  .btn-pri:hover { filter: brightness(1.1); }
+  .btn-sec { background: #161b22; border: 1px solid #1c2330; color: #e6edf3; }
+  .btn-sec:hover { border-color: #30363d; }
+  .btn-ok { background: #22c55e; color: #03140a; }
+  .mono { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+  .chip { font-family: "JetBrains Mono", monospace; font-size: .65rem; padding: .15rem .45rem; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.7); animation: pulse 1.6s infinite; display: inline-block; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); } 70% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+  .match { cursor: pointer; border: 1px solid #1c2330; border-radius: 10px; background: #0a0e14; transition: border-color .15s, background .15s; }
+  .match:hover { border-color: #30363d; }
+  .match.sel { border-color: #22d3ee; background: #0b1820; }
+  .bar { height: 6px; border-radius: 3px; background: #161b22; overflow: hidden; }
+  .bar > span { display: block; height: 100%; }
+  .scroll-y { max-height: 560px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #1c2330 transparent; }
+  .ticker { mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+  .ticker-track { display: inline-flex; gap: 2rem; animation: tick 40s linear infinite; white-space: nowrap; }
+  @keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .ticker-track, .live-dot { animation: none; } }
+  select.inp { appearance: none; background-image: linear-gradient(45deg, transparent 50%, #7d8590 50%), linear-gradient(135deg, #7d8590 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 2rem; }
+  .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; }
+</style>
+</head>
+<body class="min-h-screen pb-24">
+
+<!-- HEADER -->
+<header class="sticky top-0 z-40 bg-term-bg/90 backdrop-blur border-b border-term-line">
+  <div class="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="w-8 h-8 rounded-lg bg-cyan/10 text-cyan grid place-items-center shrink-0"><i class="fa-solid fa-chart-line"></i></div>
+      <div class="min-w-0">
+        <div class="font-bold tracking-tight truncate">GoalValue <span class="text-cyan">Analytics</span> <span class="text-down text-xs align-top mono">LIVE</span></div>
+        <div class="text-[10px] text-term-mute mono truncate" id="hdrSub">Value betting · In-play analysis</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="netStatus" class="chip text-term-mute">OFFLINE</span>
+      <span id="clock" class="mono text-xs text-term-mute hidden sm:inline">--:--:--</span>
+    </div>
+  </div>
+  <div class="ticker overflow-hidden border-t border-term-line h-7 flex items-center text-xs mono text-term-mute">
+    <div id="ticker" class="ticker-track px-4"><span>In attesa dei dati partite…</span><span>In attesa dei dati partite…</span></div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 pt-4 space-y-4">
+
+  <!-- 1. CONFIG API -->
+  <section class="panel" id="cfgPanel">
+    <button class="w-full flex items-center justify-between px-4 py-3 text-left" id="cfgToggle" aria-expanded="true">
+      <span class="flex items-center gap-2 font-semibold"><i class="fa-solid fa-key text-amber"></i> Configurazione API <span class="text-term-mute font-normal text-xs hidden sm:inline">football-data.org v4</span></span>
+      <span class="flex items-center gap-2"><span id="keyBadge" class="chip text-term-mute">NESSUNA CHIAVE</span><i class="fa-solid fa-chevron-down text-term-mute transition-transform" id="cfgChevron"></i></span>
+    </button>
+    <div id="cfgBody" class="px-4 pb-4 border-t border-term-line pt-4">
+      <div class="grid gap-3 md:grid-cols-12">
+        <div class="md:col-span-5">
+          <label class="lbl" for="apiKey">API Key (X-Auth-Token)</label>
+          <div class="relative">
+            <input id="apiKey" type="password" class="inp pr-11" placeholder="Incolla la tua chiave…" autocomplete="off" spellcheck="false">
+            <button id="keyEye" class="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 text-term-mute hover:text-term-text" aria-label="Mostra chiave"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </div>
+        <div class="md:col-span-3">
+          <label class="lbl" for="proxyMode">Instradamento CORS</label>
+          <select id="proxyMode" class="inp">
+            <option value="auto">Auto (diretto → proxy)</option>
+            <option value="direct">Solo diretto</option>
+            <option value="corsproxy">corsproxy.io</option>
+            <option value="custom">Proxy personalizzato</option>
+          </select>
+        </div>
+        <div class="md:col-span-4">
+          <label class="lbl" for="customProxy">Proxy personalizzato <span class="normal-case tracking-normal">({url} = destinazione)</span></label>
+          <input id="customProxy" type="text" class="inp" placeholder="https://mio-worker.dev/?url={url}" spellcheck="false">
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button id="btnTest" class="btn btn-sec"><i class="fa-solid fa-plug-circle-check"></i> Testa</button>
+        <button id="btnSave" class="btn btn-pri"><i class="fa-solid fa-floppy-disk"></i> Salva</button>
+        <button id="btnClear" class="btn btn-sec text-down"><i class="fa-solid fa-trash-can"></i> Rimuovi</button>
+        <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener" class="btn btn-sec text-term-mute"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ottieni chiave gratuita</a>
+      </div>
+      <div id="cfgMsg" class="mt-3 text-xs mono text-term-mute min-h-[1rem]"></div>
+      <p class="mt-2 text-[11px] text-term-mute leading-relaxed">
+        <i class="fa-solid fa-circle-info"></i> La chiave resta solo nel <span class="mono">localStorage</span> di questo browser. In modalità Auto l'app prova prima la chiamata diretta (football-data.org abilita il CORS), poi corsproxy.io, poi il tuo proxy. I proxy "solo GET" come allorigins.win non inoltrano l'header <span class="mono">X-Auth-Token</span> e quindi non sono utilizzabili per le chiamate autenticate. Se nulla risponde, l'app passa ai dati DEMO senza bloccarsi.
+      </p>
+    </div>
+  </section>
+
+  <!-- KPI STRIP -->
+  <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="kpis">
+    <div class="panel p-3"><div class="lbl">Utile netto</div><div id="kNet" class="mono text-xl font-bold">€0,00</div></div>
+    <div class="panel p-3"><div class="lbl">ROI</div><div id="kRoi" class="mono text-xl font-bold">0,00%</div></div>
+    <div class="panel p-3"><div class="lbl">Win rate</div><div id="kWin" class="mono text-xl font-bold">0,0%</div></div>
+    <div class="panel p-3"><div class="lbl">Live adesso</div><div id="kLive" class="mono text-xl font-bold text-down">0</div></div>
+  </section>
+
+  <div class="grid gap-4 lg:grid-cols-12">
+
+    <!-- 2. RADAR LIVE -->
+    <section class="panel lg:col-span-7 flex flex-col min-w-0">
+      <div class="panel-h px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-satellite-dish text-cyan"></i> Radar Live <span id="srcBadge" class="chip text-term-mute">—</span></h2>
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-1.5 text-xs text-term-mute cursor-pointer select-none"><input type="checkbox" id="autoRefresh" class="accent-cyan w-4 h-4" checked> Auto 60s</label>
+          <button id="btnRefresh" class="btn btn-sec !min-h-[36px] !px-3" aria-label="Aggiorna"><i class="fa-solid fa-rotate"></i></button>
+        </div>
+      </div>
+      <div class="px-4 pt-3 flex gap-2 overflow-x-auto no-scrollbar" id="filters">
+        <button data-f="all" class="fbtn chip !text-xs !py-1 !px-3 text-cyan">Tutte</button>
+        <button data-f="live" class="fbtn chip !text-xs !py-1 !px-3 text-term-mute">Live</button>
+        <button data-f="sched" class="fbtn chip !text-xs !py-1 !px-3 text-term-mute">Da giocare</button>
+        <button data-f="fin" class="fbtn chip !text-xs !py-1 !px-3 text-term-mute">Finite</button>
+      </div>
+      <div class="px-4 pt-3">
+        <input id="search" type="search" class="inp !py-2" placeholder="Cerca squadra o competizione…">
+      </div>
+      <div id="radarMsg" class="px-4 pt-3 text-xs mono text-term-mute"></div>
+      <div id="radar" class="p-4 space-y-4 scroll-y flex-1"></div>
+      <div class="px-4 py-2 border-t border-term-line text-[11px] mono text-term-mute flex justify-between gap-2">
+        <span id="lastUpd">Ultimo aggiornamento: —</span><span id="reqInfo"></span>
+      </div>
+    </section>
+
+    <!-- 3. AI SCOUT -->
+    <section class="panel lg:col-span-5 flex flex-col min-w-0">
+      <div class="panel-h px-4 py-3 flex items-center justify-between gap-2">
+        <h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-brain text-amber"></i> AI Scout</h2>
+        <span class="chip text-amber">Poisson + regole</span>
+      </div>
+      <div id="scout" class="p-4">
+        <div class="text-center text-term-mute py-10">
+          <i class="fa-solid fa-crosshairs text-3xl mb-3 opacity-60"></i>
+          <p class="text-sm">Seleziona una partita dal Radar per generare l'analisi tattica.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-12">
+    <!-- 4. EV + KELLY -->
+    <section class="panel lg:col-span-5 min-w-0" id="calcPanel">
+      <div class="panel-h px-4 py-3 flex items-center justify-between">
+        <h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-calculator text-up"></i> Calcolatore EV &amp; Kelly</h2>
+        <button id="calcReset" class="text-xs text-term-mute hover:text-term-text"><i class="fa-solid fa-eraser"></i> Reset</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <div>
+          <label class="lbl" for="cEvent">Evento / Mercato</label>
+          <input id="cEvent" class="inp" placeholder="es. Inter - Milan · Over 2.5">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="lbl" for="cOdds">Quota (decimale)</label><input id="cOdds" class="inp" type="number" inputmode="decimal" step="0.01" min="1.01" value="2.10"></div>
+          <div><label class="lbl" for="cProb">Probabilità stimata %</label><input id="cProb" class="inp" type="number" inputmode="decimal" step="0.1" min="0" max="100" value="52"></div>
+          <div><label class="lbl" for="cBank">Bankroll €</label><input id="cBank" class="inp" type="number" inputmode="decimal" step="1" min="0" value="1000"></div>
+          <div><label class="lbl" for="cFrac">Frazione Kelly</label>
+            <select id="cFrac" class="inp">
+              <option value="1">Full 1/1</option>
+              <option value="0.5">Half 1/2</option>
+              <option value="0.25" selected>Quarter 1/4</option>
+              <option value="0.125">Eighth 1/8</option>
+            </select>
+          </div>
+        </div>
+        <div id="evVerdict" class="rounded-lg p-3 border text-sm font-semibold flex items-center gap-2"></div>
+        <div class="grid grid-cols-2 gap-2 mono text-sm">
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1">EV per €1</div><div id="oEv">—</div></div>
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1">Edge vs implicita</div><div id="oEdge">—</div></div>
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1">Prob. implicita</div><div id="oImpl">—</div></div>
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1">Quota fair</div><div id="oFair">—</div></div>
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1">Kelly pieno</div><div id="oKFull">—</div></div>
+          <div class="bg-term-bg rounded-lg p-2.5 border border-term-line"><div class="lbl !mb-1" id="oKLbl">Quarter Kelly</div><div id="oKFrac">—</div></div>
+        </div>
+        <div class="bg-cyan/5 border border-cyan/30 rounded-lg p-3 flex items-center justify-between gap-3">
+          <div><div class="lbl !mb-0.5 !text-cyan">Stake consigliato</div><div id="oStake" class="mono text-2xl font-bold">€0,00</div></div>
+          <div class="text-right mono text-xs text-term-mute"><div>Profitto se vinta</div><div id="oWin" class="text-up text-sm">€0,00</div><div>EV atteso</div><div id="oEvEur" class="text-sm">€0,00</div></div>
+        </div>
+        <button id="calcToTracker" class="btn btn-ok w-full"><i class="fa-solid fa-plus"></i> Registra nel Tracker</button>
+        <details class="text-[11px] text-term-mute">
+          <summary class="cursor-pointer">Formule</summary>
+          <div class="mono mt-2 space-y-1 leading-relaxed">
+            <div>EV = p × Q − 1</div>
+            <div>p<sub>impl</sub> = 1 / Q · Q<sub>fair</sub> = 1 / p</div>
+            <div>Kelly f* = (b·p − q) / b, con b = Q − 1, q = 1 − p</div>
+            <div>Stake = Bankroll × f* × frazione (0 se f* ≤ 0)</div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- 5. TRACKER -->
+    <section class="panel lg:col-span-7 min-w-0 flex flex-col">
+      <div class="panel-h px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-list-check text-cyan"></i> Tracker Scommesse</h2>
+        <div class="flex gap-2">
+          <button id="btnExport" class="btn btn-sec !min-h-[36px] !px-3 text-xs"><i class="fa-solid fa-file-csv"></i> CSV</button>
+          <button id="btnWipe" class="btn btn-sec !min-h-[36px] !px-3 text-xs text-down"><i class="fa-solid fa-broom"></i></button>
+        </div>
+      </div>
+      <form id="betForm" class="p-4 grid grid-cols-2 md:grid-cols-12 gap-3 border-b border-term-line" autocomplete="off">
+        <div class="col-span-2 md:col-span-4"><label class="lbl" for="bEvent">Evento</label><input id="bEvent" class="inp" required placeholder="Squadra A - Squadra B"></div>
+        <div class="col-span-2 md:col-span-3"><label class="lbl" for="bMarket">Mercato</label><input id="bMarket" class="inp" placeholder="1X2 · Over 2.5 …"></div>
+        <div class="md:col-span-2"><label class="lbl" for="bOdds">Quota</label><input id="bOdds" class="inp" type="number" inputmode="decimal" step="0.01" min="1.01" required></div>
+        <div class="md:col-span-1"><label class="lbl" for="bStake">Stake</label><input id="bStake" class="inp" type="number" inputmode="decimal" step="0.01" min="0.01" required></div>
+        <div class="col-span-2 md:col-span-2 flex items-end"><button class="btn btn-pri w-full" type="submit"><i class="fa-solid fa-plus"></i> Aggiungi</button></div>
+      </form>
+      <div class="px-4 pt-3 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center mono text-xs" id="trkStats"></div>
+      <div id="betList" class="p-4 space-y-2 scroll-y"></div>
+    </section>
+  </div>
+
+  <footer class="text-center text-[11px] text-term-mute mono py-6 leading-relaxed">
+    Dati: football-data.org · Le analisi sono stime statistiche, non garanzie. Gioca responsabilmente.
+  </footer>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+'use strict';
+/* =========================================================
+   UTIL
+   ========================================================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
+const eur = (v) => (v < 0 ? '−' : '') + '€' + Math.abs(v).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = (v, d = 2) => (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) + '%';
+const fx = (v, d = 2) => Number(v).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const pad = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+const store = {
+  get(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+const K = { key: 'gv_api_key', proxy: 'gv_proxy_mode', custom: 'gv_custom_proxy', lastProxy: 'gv_last_proxy', bets: 'gv_bets', calc: 'gv_calc', cfgOpen: 'gv_cfg_open' };
+
+let toastT;
+function toast(msg, type = 'info') {
+  const el = $('#toast');
+  const c = { info: 'border-cyan text-cyan', ok: 'border-up text-up', err: 'border-down text-down', warn: 'border-amber text-amber' }[type];
+  el.innerHTML = `<div class="panel ${c} px-4 py-2.5 text-sm mono shadow-2xl max-w-[90vw]">${esc(msg)}</div>`;
+  el.classList.remove('hidden');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.add('hidden'), 2800);
+}
+
+/* =========================================================
+   API LAYER — football-data.org v4 con catena proxy CORS
+   ========================================================= */
+const API_BASE = 'https://api.football-data.org/v4';
+const PROXIES = {
+  direct:    { name: 'Diretto',      build: (u) => u },
+  corsproxy: { name: 'corsproxy.io', build: (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+  custom:    { name: 'Proxy custom', build: (u) => {
+    const t = (store.get(K.custom, '') || '').trim();
+    if (!t) return null;
+    return t.includes('{url}') ? t.replace('{url}', encodeURIComponent(u)) : t + encodeURIComponent(u);
+  } }
+};
+let reqCount = 0, rateLeft = null;
+
+class ApiError extends Error { constructor(msg, status, fatal) { super(msg); this.status = status; this.fatal = fatal; } }
+
+function proxyOrder() {
+  const mode = store.get(K.proxy, 'auto');
+  if (mode !== 'auto') return [mode];
+  const order = ['direct', 'corsproxy'];
+  if ((store.get(K.custom, '') || '').trim()) order.push('custom');
+  const last = store.get(K.lastProxy, null);
+  if (last && order.includes(last)) { order.splice(order.indexOf(last), 1); order.unshift(last); }
+  return order;
+}
+
+async function fetchTimeout(url, opts, ms = 9000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctl.signal }); }
+  finally { clearTimeout(t); }
+}
+
+async function apiGet(path, key = store.get(K.key, '')) {
+  if (!key) throw new ApiError('API Key mancante', 0, true);
+  if (!navigator.onLine) throw new ApiError('Dispositivo offline', 0, true);
+  const target = API_BASE + path;
+  const errors = [];
+  for (const p of proxyOrder()) {
+    const url = PROXIES[p].build(target);
+    if (!url) { errors.push(`${PROXIES[p].name}: non configurato`); continue; }
+    try {
+      reqCount++;
+      const res = await fetchTimeout(url, { headers: { 'X-Auth-Token': key }, cache: 'no-store' });
+      const rl = res.headers.get('X-Requests-Available-Minute');
+      if (rl !== null) rateLeft = rl;
+      if (res.ok) {
+        const data = await res.json();
+        store.set(K.lastProxy, p);
+        return { data, via: PROXIES[p].name };
+      }
+      let detail = '';
+      try { detail = (await res.json()).message || ''; } catch {}
+      // Errori di autenticazione/limite sono reali: inutile provare altri proxy
+      if (res.status === 400 || res.status === 403) throw new ApiError(detail || 'Chiave non valida o competizione non inclusa nel piano', res.status, true);
+      if (res.status === 429) throw new ApiError('Limite richieste raggiunto (10/min sul piano free). Riprova tra poco.', 429, true);
+      errors.push(`${PROXIES[p].name}: HTTP ${res.status}`);
+    } catch (e) {
+      if (e instanceof ApiError && e.fatal) throw e;
+      errors.push(`${PROXIES[p].name}: ${e.name === 'AbortError' ? 'timeout' : 'rete/CORS'}`);
+    }
+  }
+  throw new ApiError('Nessun percorso raggiungibile · ' + errors.join(' · '), 0, false);
+}
+
+/* =========================================================
+   STATO MATCH
+   ========================================================= */
+const S = { matches: [], source: 'none', filter: 'all', q: '', selId: null, standings: {} };
+const LIVE = ['IN_PLAY', 'PAUSED', 'LIVE'];
+const SCHED = ['SCHEDULED', 'TIMED'];
+const FIN = ['FINISHED', 'AWARDED'];
+const STATUS_LBL = { IN_PLAY: 'LIVE', LIVE: 'LIVE', PAUSED: 'INTERVALLO', SCHEDULED: 'PROGRAMMATA', TIMED: 'PROGRAMMATA', FINISHED: 'FINALE', AWARDED: 'A TAVOLINO', POSTPONED: 'RINVIATA', SUSPENDED: 'SOSPESA', CANCELLED: 'ANNULLATA' };
+
+function normMatch(m) {
+  const ft = m.score?.fullTime || {}, ht = m.score?.halfTime || {};
+  return {
+    id: m.id,
+    comp: m.competition?.name || 'Competizione',
+    compCode: m.competition?.code || '',
+    compId: m.competition?.id,
+    emblem: m.competition?.emblem || '',
+    area: m.area?.name || '',
+    utc: m.utcDate,
+    status: m.status,
+    minute: m.minute ?? null,
+    injury: m.injuryTime ?? null,
+    home: { id: m.homeTeam?.id, name: m.homeTeam?.shortName || m.homeTeam?.name || 'Casa', crest: m.homeTeam?.crest || '' },
+    away: { id: m.awayTeam?.id, name: m.awayTeam?.shortName || m.awayTeam?.name || 'Ospite', crest: m.awayTeam?.crest || '' },
+    sh: ft.home ?? null, sa: ft.away ?? null,
+    hh: ht.home ?? null, ha: ht.away ?? null,
+    demo: !!m._demo
+  };
+}
+
+// Minuto stimato: usa quello dell'API se presente, altrimenti dal calcio d'inizio
+function estMinute(m) {
+  if (FIN.includes(m.status)) return 90;
+  if (m.status === 'PAUSED') return 45;
+  if (!LIVE.includes(m.status)) return 0;
+  if (Number.isFinite(m.minute)) return clamp(m.minute, 1, 120);
+  let el = (Date.now() - new Date(m.utc).getTime()) / 60000;
+  if (el > 47) el -= 15; // intervallo
+  return clamp(Math.round(el), 1, 90);
+}
+
+function demoMatches() {
+  const now = Date.now(), mk = (offMin) => new Date(now + offMin * 60000).toISOString();
+  const T = (id, name) => ({ id, name, shortName: name, crest: '' });
+  const raw = [
+    { c: ['Serie A', 'SA', 2019], h: T(108, 'Inter'), a: T(98, 'Milan'), st: 'IN_PLAY', t: -62, s: [1, 1], ht: [1, 0] },
+    { c: ['Premier League', 'PL', 2021], h: T(57, 'Arsenal'), a: T(65, 'Man City'), st: 'IN_PLAY', t: -30, s: [0, 0], ht: [null, null] },
+    { c: ['Primera Division', 'PD', 2014], h: T(86, 'Real Madrid'), a: T(78, 'Atlético'), st: 'PAUSED', t: -50, s: [0, 1], ht: [0, 1] },
+    { c: ['Bundesliga', 'BL1', 2002], h: T(5, 'Bayern'), a: T(4, 'Dortmund'), st: 'FINISHED', t: -180, s: [3, 2], ht: [1, 1] },
+    { c: ['Serie A', 'SA', 2019], h: T(109, 'Juventus'), a: T(113, 'Napoli'), st: 'TIMED', t: 95, s: [null, null], ht: [null, null] },
+    { c: ['Ligue 1', 'FL1', 2015], h: T(524, 'PSG'), a: T(516, 'Marseille'), st: 'TIMED', t: 210, s: [null, null], ht: [null, null] },
+    { c: ['Premier League', 'PL', 2021], h: T(64, 'Liverpool'), a: T(61, 'Chelsea'), st: 'IN_PLAY', t: -81, s: [2, 0], ht: [1, 0] }
+  ];
+  return raw.map((r, i) => ({
+    _demo: true, id: 900000 + i, utcDate: mk(r.t), status: r.st,
+    competition: { name: r.c[0], code: r.c[1], id: r.c[2] }, area: { name: '' },
+    homeTeam: r.h, awayTeam: r.a,
+    score: { fullTime: { home: r.s[0], away: r.s[1] }, halfTime: { home: r.ht[0], away: r.ht[1] } }
+  }));
+}
+
+async function loadMatches(manual = false) {
+  const btn = $('#btnRefresh');
+  btn.disabled = true; btn.querySelector('i').classList.add('fa-spin');
+  const key = store.get(K.key, '');
+  try {
+    if (!key) throw new ApiError('Nessuna API Key salvata: visualizzo dati DEMO.', 0, true);
+    const today = new Date(), tom = new Date(today.getTime() + 86400000);
+    const { data, via } = await apiGet(`/matches?dateFrom=${ymd(today)}&dateTo=${ymd(tom)}`, key);
+    const todayStr = ymd(today);
+    S.matches = (data.matches || []).map(normMatch).filter(m => ymd(new Date(m.utc)) === todayStr);
+    S.source = 'live';
+    setNet('ONLINE · ' + via, 'up');
+    $('#radarMsg').textContent = S.matches.length ? '' : 'Nessuna partita oggi nelle competizioni incluse nel tuo piano.';
+    if (manual) toast(`${S.matches.length} partite caricate (${via})`, 'ok');
+  } catch (e) {
+    const hadLive = S.source === 'live' && S.matches.length;
+    if (hadLive && e.status === 429) {
+      $('#radarMsg').innerHTML = `<span class="text-amber"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(e.message)} Mostro gli ultimi dati.</span>`;
+    } else {
+      S.matches = demoMatches().map(normMatch);
+      S.source = 'demo';
+      $('#radarMsg').innerHTML = `<span class="text-amber"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(e.message)}</span>${key ? ' <span>· Dati DEMO attivi.</span>' : ''}`;
+    }
+    setNet(key ? 'FALLBACK' : 'DEMO', 'amber');
+    if (manual && key) toast(e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.querySelector('i').classList.remove('fa-spin');
+    $('#lastUpd').textContent = 'Ultimo aggiornamento: ' + new Date().toLocaleTimeString('it-IT');
+    $('#reqInfo').textContent = rateLeft !== null ? `Richieste disponibili/min: ${rateLeft}` : `Richieste: ${reqCount}`;
+    renderRadar();
+    if (S.selId) { const m = S.matches.find(x => x.id === S.selId); m ? renderScout(m) : resetScout(); }
+  }
+}
+
+function setNet(txt, color) {
+  const el = $('#netStatus');
+  el.textContent = txt;
+  el.className = 'chip ' + ({ up: 'text-up', amber: 'text-amber', down: 'text-down' }[color] || 'text-term-mute');
+  const src = $('#srcBadge');
+  src.textContent = S.source === 'live' ? 'API' : 'DEMO';
+  src.className = 'chip ' + (S.source === 'live' ? 'text-up' : 'text-amber');
+}
+
+/* =========================================================
+   RADAR RENDER
+   ========================================================= */
+function statusChip(m) {
+  if (LIVE.includes(m.status)) {
+    const min = m.status === 'PAUSED' ? 'HT' : (Number.isFinite(m.minute) ? m.minute + "'" : '~' + estMinute(m) + "'");
+    return `<span class="flex items-center gap-1.5 text-down mono text-xs font-bold"><span class="live-dot"></span>${min}</span>`;
+  }
+  const col = FIN.includes(m.status) ? 'text-term-mute' : SCHED.includes(m.status) ? 'text-cyan' : 'text-amber';
+  return `<span class="chip ${col}">${esc(STATUS_LBL[m.status] || m.status)}</span>`;
+}
+
+function crest(t) {
+  const ini = esc((t.name || '?').slice(0, 2).toUpperCase());
+  if (!t.crest) return `<span class="w-6 h-6 rounded-full bg-term-line grid place-items-center text-[9px] mono shrink-0">${ini}</span>`;
+  return `<img src="${esc(t.crest)}" alt="" class="w-6 h-6 object-contain shrink-0" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'w-6 h-6 rounded-full bg-term-line grid place-items-center text-[9px] mono shrink-0',textContent:'${ini}'}))">`;
+}
+
+function renderRadar() {
+  const q = S.q.trim().toLowerCase();
+  let list = S.matches.filter(m => {
+    if (S.filter === 'live' && !LIVE.includes(m.status)) return false;
+    if (S.filter === 'sched' && !SCHED.includes(m.status)) return false;
+    if (S.filter === 'fin' && !FIN.includes(m.status)) return false;
+    if (q && !(m.home.name + ' ' + m.away.name + ' ' + m.comp).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const rank = (m) => LIVE.includes(m.status) ? 0 : SCHED.includes(m.status) ? 1 : FIN.includes(m.status) ? 2 : 3;
+  list.sort((a, b) => rank(a) - rank(b) || new Date(a.utc) - new Date(b.utc));
+
+  const live = S.matches.filter(m => LIVE.includes(m.status));
+  $('#kLive').textContent = live.length;
+
+  // ticker
+  const tItems = (live.length ? live : S.matches.slice(0, 8)).map(m =>
+    `<span><span class="${LIVE.includes(m.status) ? 'text-down' : 'text-term-mute'}">●</span> ${esc(m.home.name)} <b class="text-term-text">${m.sh ?? '-'}:${m.sa ?? '-'}</b> ${esc(m.away.name)}</span>`).join('');
+  $('#ticker').innerHTML = tItems ? tItems + tItems : '<span>Nessuna partita</span><span>Nessuna partita</span>';
+
+  if (!list.length) { $('#radar').innerHTML = `<div class="text-center text-term-mute text-sm py-10"><i class="fa-regular fa-futbol text-2xl mb-2 block opacity-60"></i>Nessuna partita per questo filtro.</div>`; return; }
+
+  const groups = {};
+  list.forEach(m => (groups[m.comp] ||= []).push(m));
+  $('#radar').innerHTML = Object.entries(groups).map(([comp, ms]) => `
+    <div>
+      <div class="flex items-center gap-2 mb-2 text-[11px] uppercase tracking-wider text-term-mute">
+        ${ms[0].emblem ? `<img src="${esc(ms[0].emblem)}" alt="" class="w-4 h-4 object-contain" loading="lazy" onerror="this.remove()">` : '<i class="fa-solid fa-trophy"></i>'}
+        <span class="truncate">${esc(comp)}</span><span class="flex-1 h-px bg-term-line"></span><span class="mono">${ms.length}</span>
+      </div>
+      <div class="space-y-2">
+        ${ms.map(m => {
+          const isLive = LIVE.includes(m.status), hasScore = m.sh !== null;
+          const sc = (v) => `<span class="mono text-lg font-bold w-6 text-center ${isLive ? 'text-term-text' : 'text-term-mute'}">${hasScore ? v : ''}</span>`;
+          return `
+          <div class="match p-3 ${m.id === S.selId ? 'sel' : ''}" data-id="${m.id}" role="button" tabindex="0">
+            <div class="flex items-center gap-3">
+              <div class="w-16 shrink-0 flex flex-col items-start gap-1">
+                ${statusChip(m)}
+                <span class="mono text-[11px] text-term-mute">${hm(new Date(m.utc))}</span>
+              </div>
+              <div class="flex-1 min-w-0 space-y-1.5">
+                <div class="flex items-center gap-2 min-w-0">${crest(m.home)}<span class="truncate text-sm ${hasScore && m.sh > m.sa ? 'font-bold' : ''}">${esc(m.home.name)}</span><span class="ml-auto">${sc(m.sh)}</span></div>
+                <div class="flex items-center gap-2 min-w-0">${crest(m.away)}<span class="truncate text-sm ${hasScore && m.sa > m.sh ? 'font-bold' : ''}">${esc(m.away.name)}</span><span class="ml-auto">${sc(m.sa)}</span></div>
+              </div>
+              <i class="fa-solid fa-chevron-right text-term-mute text-xs"></i>
+            </div>
+            ${m.hh !== null && !SCHED.includes(m.status) ? `<div class="mono text-[10px] text-term-mute mt-1.5 pl-[76px]">1T ${m.hh}-${m.ha}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* =========================================================
+   AI SCOUT — modello di Poisson + regole tattiche
+   ========================================================= */
+async function getStandings(m) {
+  if (m.demo || !m.compId) return null;
+  const c = S.standings[m.compId];
+  if (c && Date.now() - c.t < 30 * 60000) return c.table;
+  try {
+    const { data } = await apiGet(`/competitions/${m.compId}/standings`);
+    const table = {};
+    (data.standings || []).filter(s => s.type === 'TOTAL').forEach(s => (s.table || []).forEach(r => {
+      if (r.team?.id) table[r.team.id] = { pos: r.position, pj: r.playedGames, gf: r.goalsFor, ga: r.goalsAgainst, pts: r.points, form: r.form || '' };
+    }));
+    S.standings[m.compId] = { t: Date.now(), table };
+    return table;
+  } catch { return null; }
+}
+
+// Profili DEMO coerenti per l'analisi offline
+const DEMO_STATS = {
+  108: [1, 9, 22, 7, 23], 98: [5, 9, 15, 11, 16], 57: [2, 9, 19, 6, 21], 65: [1, 9, 23, 9, 22], 86: [1, 10, 24, 8, 25],
+  78: [3, 10, 17, 9, 19], 5: [1, 8, 28, 8, 22], 4: [4, 8, 17, 12, 15], 109: [3, 9, 14, 6, 18], 113: [2, 9, 16, 7, 20],
+  524: [1, 9, 25, 7, 23], 516: [3, 9, 18, 10, 17], 64: [2, 9, 20, 9, 20], 61: [6, 9, 16, 12, 14]
+};
+function demoTable(m) {
+  const t = {};
+  [m.home, m.away].forEach(x => { const d = DEMO_STATS[x.id]; if (d) t[x.id] = { pos: d[0], pj: d[1], gf: d[2], ga: d[3], pts: d[4], form: '' }; });
+  return t;
+}
+
+const poisPmf = (k, l) => { let p = Math.exp(-l); for (let i = 1; i <= k; i++) p *= l / i; return p; };
+
+function model(m, table) {
+  let avg = 1.35, hasData = false;
+  const rows = table ? Object.values(table) : [];
+  const totPj = rows.reduce((a, r) => a + r.pj, 0);
+  if (totPj > 0) avg = clamp(rows.reduce((a, r) => a + r.gf, 0) / totPj, 0.8, 2.2);
+  const h = table?.[m.home.id], a = table?.[m.away.id];
+  const K_SHRINK = 3; // regressione verso la media con campioni piccoli
+  const rate = (g, pj) => ((g + avg * K_SHRINK) / (pj + K_SHRINK)) / avg;
+  let attH = 1, defH = 1, attA = 1, defA = 1;
+  if (h && a && h.pj > 0 && a.pj > 0) {
+    hasData = true;
+    attH = rate(h.gf, h.pj); defH = rate(h.ga, h.pj);
+    attA = rate(a.gf, a.pj); defA = rate(a.ga, a.pj);
+  }
+  const lh = clamp(avg * attH * defA * 1.12, 0.2, 4);
+  const la = clamp(avg * attA * defH * 0.90, 0.2, 4);
+
+  const min = estMinute(m);
+  const live = LIVE.includes(m.status), fin = FIN.includes(m.status);
+  const rem = fin ? 0 : clamp((90 - min) / 90, 0, 1);
+  const ch = live || fin ? (m.sh ?? 0) : 0, ca = live || fin ? (m.sa ?? 0) : 0;
+
+  // Aggiustamento in-play: chi è sotto spinge, chi è avanti abbassa il ritmo
+  let rh = lh * rem, ra = la * rem;
+  if (live && ch !== ca) {
+    const late = min >= 60 ? 1.18 : 1.08;
+    if (ch < ca) { rh *= late; ra *= 1.05; } else { ra *= late; rh *= 1.05; }
+  }
+
+  const N = 10; let p1 = 0, pX = 0, p2 = 0, o15 = 0, o25 = 0, o35 = 0, btts = 0;
+  const top = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const p = poisPmf(i, rh) * poisPmf(j, ra);
+    const fh = ch + i, fa = ca + j, tot = fh + fa;
+    if (fh > fa) p1 += p; else if (fh === fa) pX += p; else p2 += p;
+    if (tot > 1.5) o15 += p; if (tot > 2.5) o25 += p; if (tot > 3.5) o35 += p;
+    if (fh > 0 && fa > 0) btts += p;
+    top.push({ s: `${fh}-${fa}`, p });
+  }
+  const sum = p1 + pX + p2;
+  const remTot = rh + ra, pAny = 1 - Math.exp(-remTot);
+  const next = { h: remTot ? pAny * rh / remTot : 0, a: remTot ? pAny * ra / remTot : 0, none: 1 - pAny };
+  top.sort((x, y) => y.p - x.p);
+  return { lh, la, rh, ra, avg, min, rem, ch, ca, live, fin, hasData, h, a,
+    p1: p1 / sum, pX: pX / sum, p2: p2 / sum, o15, o25, o35, btts, next, top: top.slice(0, 4) };
+}
+
+function tacticalNotes(m, r) {
+  const n = [];
+  const H = esc(m.home.name), A = esc(m.away.name);
+  const xg = r.lh + r.la;
+  if (r.h && r.a) {
+    const gap = r.a.pos - r.h.pos;
+    if (Math.abs(gap) >= 6) n.push(['fa-scale-unbalanced', `Divario di classifica marcato (${r.h.pos}° vs ${r.a.pos}°): ${gap > 0 ? H : A} parte con i favori del pronostico.`]);
+    else n.push(['fa-scale-balanced', `Squadre vicine in classifica (${r.h.pos}° vs ${r.a.pos}°): match equilibrato, attenzione alla gestione dei momenti.`]);
+    const dh = r.h.ga / Math.max(1, r.h.pj), da = r.a.ga / Math.max(1, r.a.pj);
+    if (dh > 1.5 || da > 1.5) n.push(['fa-shield-halved', `Fragilità difensiva: ${dh > da ? H : A} concede ${fx(Math.max(dh, da), 2)} gol/partita.`]);
+    if (r.h.form || r.a.form) n.push(['fa-chart-simple', `Forma recente: ${H} ${esc(r.h.form || 'n/d')} · ${A} ${esc(r.a.form || 'n/d')}`]);
+  } else {
+    n.push(['fa-circle-question', 'Classifica non disponibile: il modello usa medie di campionato standard (affidabilità ridotta).']);
+  }
+  if (xg >= 3) n.push(['fa-fire', `Profilo offensivo (xG modello ${fx(xg, 2)}): scenario favorevole ai mercati Over e Goal.`]);
+  else if (xg <= 2.2) n.push(['fa-lock', `Profilo chiuso (xG modello ${fx(xg, 2)}): Under e "No Goal" più coerenti.`]);
+
+  if (r.live) {
+    const d = r.ch - r.ca;
+    if (m.status === 'PAUSED') n.push(['fa-mug-hot', 'Intervallo: finestra ideale per entrare prima del riassestamento delle quote del 2° tempo.']);
+    if (d === 0 && r.min >= 65 && r.ch + r.ca === 0) n.push(['fa-hourglass-half', `0-0 al ${r.min}': il decadimento temporale spinge l'Under; quote Over in deriva, valutare lay/back solo con edge chiaro.`]);
+    else if (d === 0) n.push(['fa-arrows-left-right', `Parità al ${r.min}': prossimo gol ${H} ${pct(r.next.h * 100, 0)} vs ${A} ${pct(r.next.a * 100, 0)}.`]);
+    if (d !== 0) {
+      const trail = d < 0 ? H : A, lead = d < 0 ? A : H;
+      n.push(['fa-person-running', `${trail} sotto nel punteggio: atteso baricentro alto e pressione crescente; ${lead} può abbassarsi e ripartire in contropiede.`]);
+      if (Math.abs(d) >= 2 && r.min >= 70) n.push(['fa-flag-checkered', `Doppio vantaggio al ${r.min}': partita virtualmente chiusa, valore residuo solo su mercati gol/angoli.`]);
+      if (Math.abs(d) === 1 && r.min >= 75) n.push(['fa-bolt', `Finale caldo: con −1 negli ultimi minuti cresce la probabilità di gol tardivo (prossimo gol ${trail}: ${pct((d < 0 ? r.next.h : r.next.a) * 100, 0)}).`]);
+    }
+  } else if (r.fin) {
+    n.push(['fa-flag-checkered', `Partita terminata ${r.ch}-${r.ca}. Analisi utile come verifica ex-post del modello.`]);
+  } else {
+    n.push(['fa-clock', `Pre-match: calcio d'inizio alle ${hm(new Date(m.utc))}. Confronta le quote fair qui sotto con quelle del book prima di puntare.`]);
+  }
+  return n;
+}
+
+function resetScout() {
+  S.selId = null;
+  $('#scout').innerHTML = `<div class="text-center text-term-mute py-10"><i class="fa-solid fa-crosshairs text-3xl mb-3 opacity-60"></i><p class="text-sm">Seleziona una partita dal Radar per generare l'analisi tattica.</p></div>`;
+}
+
+async function selectMatch(id) {
+  const m = S.matches.find(x => x.id === id);
+  if (!m) return;
+  S.selId = id;
+  $$('.match').forEach(el => el.classList.toggle('sel', +el.dataset.id === id));
+  $('#scout').innerHTML = `<div class="py-10 text-center text-term-mute mono text-sm"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Analisi di ${esc(m.home.name)} - ${esc(m.away.name)}…</div>`;
+  if (window.innerWidth < 1024) $('#scout').closest('section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await renderScout(m);
+}
+
+let scoutToken = 0;
+async function renderScout(m) {
+  const tk = ++scoutToken;
+  const table = m.demo ? demoTable(m) : await getStandings(m);
+  if (tk !== scoutToken || S.selId !== m.id) return;
+  const r = model(m, table);
+  const notes = tacticalNotes(m, r);
+  const ev = `${m.home.name} - ${m.away.name}`;
+  const mk = (label, p, mkt) => {
+    const fair = p > 0 ? 1 / p : 0;
+    return `<button class="mkt w-full text-left bg-term-bg border border-term-line rounded-lg p-2.5 hover:border-cyan transition" data-ev="${esc(ev)}" data-mkt="${esc(mkt)}" data-p="${(p * 100).toFixed(2)}" ${r.fin ? 'disabled' : ''}>
+      <div class="flex justify-between text-[11px] text-term-mute"><span>${esc(label)}</span><span class="mono">fair ${p > 0.001 ? fx(fair, 2) : '—'}</span></div>
+      <div class="mono font-bold text-base mt-0.5">${pct(p * 100, 1)}</div>
+      <div class="bar mt-1.5"><span style="width:${(p * 100).toFixed(1)}%;background:${p >= .5 ? '#22c55e' : p >= .3 ? '#22d3ee' : '#7d8590'}"></span></div>
+    </button>`;
+  };
+  const conf = r.hasData ? (r.h.pj + r.a.pj >= 12 ? ['Alta', 'text-up'] : ['Media', 'text-amber']) : ['Bassa', 'text-down'];
+  $('#scout').innerHTML = `
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <div class="min-w-0">
+        <div class="text-[11px] text-term-mute uppercase tracking-wider truncate">${esc(m.comp)}</div>
+        <div class="font-bold truncate">${esc(m.home.name)} <span class="mono text-cyan">${r.live || r.fin ? `${r.ch}-${r.ca}` : 'vs'}</span> ${esc(m.away.name)}</div>
+      </div>
+      ${statusChip(m)}
+    </div>
+    <div class="grid grid-cols-3 gap-2 mono text-xs mb-3">
+      <div class="bg-term-bg rounded-lg p-2 border border-term-line"><div class="text-term-mute">xG casa</div><div class="text-sm font-bold">${fx(r.lh, 2)}</div></div>
+      <div class="bg-term-bg rounded-lg p-2 border border-term-line"><div class="text-term-mute">xG ospite</div><div class="text-sm font-bold">${fx(r.la, 2)}</div></div>
+      <div class="bg-term-bg rounded-lg p-2 border border-term-line"><div class="text-term-mute">Affidabilità</div><div class="text-sm font-bold ${conf[1]}">${conf[0]}</div></div>
+    </div>
+    ${r.live ? `<div class="mb-3"><div class="flex justify-between text-[11px] text-term-mute mono mb-1"><span>Tempo trascorso ~${r.min}'</span><span>Residuo ${pct(r.rem * 100, 0)}</span></div><div class="bar"><span style="width:${(100 - r.rem * 100).toFixed(0)}%;background:#ef4444"></span></div></div>` : ''}
+    <div class="lbl">Esito finale ${r.live ? '(in-play)' : ''} · tocca per inviare al calcolatore</div>
+    <div class="grid grid-cols-3 gap-2 mb-2">${mk('1 ' + m.home.name, r.p1, 'Esito 1')}${mk('X', r.pX, 'Esito X')}${mk('2 ' + m.away.name, r.p2, 'Esito 2')}</div>
+    <div class="grid grid-cols-2 gap-2 mb-2">${mk('Over 1.5', r.o15, 'Over 1.5')}${mk('Over 2.5', r.o25, 'Over 2.5')}${mk('Under 2.5', 1 - r.o25, 'Under 2.5')}${mk('Goal (BTTS)', r.btts, 'Goal')}</div>
+    ${!r.fin ? `<div class="lbl mt-3">Prossimo gol</div><div class="grid grid-cols-3 gap-2 mb-3">${mk(m.home.name, r.next.h, 'Prossimo gol ' + m.home.name)}${mk('Nessuno', r.next.none, 'Nessun altro gol')}${mk(m.away.name, r.next.a, 'Prossimo gol ' + m.away.name)}</div>` : ''}
+    <div class="lbl mt-3">Risultati esatti più probabili</div>
+    <div class="flex flex-wrap gap-2 mb-4">${r.top.map(t => `<span class="mono text-xs bg-term-bg border border-term-line rounded px-2 py-1">${t.s} <span class="text-term-mute">${pct(t.p * 100, 1)}</span></span>`).join('')}</div>
+    <div class="lbl">Lettura tattica</div>
+    <ul class="space-y-2 text-sm">${notes.map(([ic, t]) => `<li class="flex gap-2.5"><i class="fa-solid ${ic} text-amber mt-1 w-4 text-center shrink-0"></i><span class="leading-snug">${t}</span></li>`).join('')}</ul>
+    <p class="text-[10px] text-term-mute mt-4 mono leading-relaxed">Motore euristico locale: Poisson indipendente su attacco/difesa da classifica, vantaggio casa, decadimento temporale in-play. Integrabile con un LLM (es. Gemini) per commenti narrativi.</p>`;
+}
+
+/* =========================================================
+   CALCOLATORE EV + KELLY
+   ========================================================= */
+const C = { ev: $('#cEvent'), odds: $('#cOdds'), prob: $('#cProb'), bank: $('#cBank'), frac: $('#cFrac') };
+let lastStake = 0;
+function calc() {
+  const Q = num(C.odds.value), p = num(C.prob.value) / 100, B = num(C.bank.value), f = num(C.frac.value);
+  store.set(K.calc, { ev: C.ev.value, odds: C.odds.value, prob: C.prob.value, bank: C.bank.value, frac: C.frac.value });
+  const fracName = { 1: 'Full Kelly', 0.5: 'Half Kelly', 0.25: 'Quarter Kelly', 0.125: 'Eighth Kelly' }[f] || 'Kelly frazionario';
+  $('#oKLbl').textContent = fracName;
+  const v = $('#evVerdict');
+  const valid = Q > 1 && p > 0 && p < 1 && B >= 0;
+  if (!valid) {
+    ['#oEv', '#oEdge', '#oImpl', '#oFair', '#oKFull', '#oKFrac'].forEach(s => $(s).textContent = '—');
+    $('#oStake').textContent = eur(0); $('#oWin').textContent = eur(0); $('#oEvEur').textContent = eur(0);
+    v.className = 'rounded-lg p-3 border text-sm font-semibold flex items-center gap-2 border-term-line text-term-mute';
+    v.innerHTML = '<i class="fa-solid fa-keyboard"></i> Inserisci quota &gt; 1 e probabilità tra 0 e 100';
+    lastStake = 0; return;
+  }
+  const b = Q - 1, q = 1 - p;
+  const ev = p * Q - 1;
+  const impl = 1 / Q;
+  const kFull = (b * p - q) / b;
+  const kFrac = Math.max(0, kFull) * f;
+  const stake = B * kFrac;
+  lastStake = stake;
+  $('#oEv').innerHTML = `<span class="${ev > 0 ? 'text-up' : 'text-down'}">${ev >= 0 ? '+' : ''}${fx(ev, 4)}</span>`;
+  $('#oEdge').innerHTML = `<span class="${p - impl > 0 ? 'text-up' : 'text-down'}">${p - impl >= 0 ? '+' : ''}${pct((p - impl) * 100)}</span>`;
+  $('#oImpl').textContent = pct(impl * 100);
+  $('#oFair').textContent = fx(1 / p, 2);
+  $('#oKFull').innerHTML = `<span class="${kFull > 0 ? '' : 'text-down'}">${pct(kFull * 100)}</span>`;
+  $('#oKFrac').textContent = pct(kFrac * 100);
+  $('#oStake').textContent = eur(stake);
+  $('#oWin').textContent = '+' + eur(stake * b);
+  $('#oEvEur').innerHTML = `<span class="${ev > 0 ? 'text-up' : 'text-down'}">${eur(stake * ev)}</span>`;
+  const roi = ev * 100;
+  if (ev > 0.02) { v.className = 'rounded-lg p-3 border text-sm font-semibold flex items-center gap-2 border-up/40 bg-up/10 text-up'; v.innerHTML = `<i class="fa-solid fa-circle-check"></i> VALUE BET · rendimento atteso ${pct(roi)}`; }
+  else if (ev > 0) { v.className = 'rounded-lg p-3 border text-sm font-semibold flex items-center gap-2 border-amber/40 bg-amber/10 text-amber'; v.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> Valore marginale (${pct(roi)}): margine d'errore ridotto`; }
+  else { v.className = 'rounded-lg p-3 border text-sm font-semibold flex items-center gap-2 border-down/40 bg-down/10 text-down'; v.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> NO VALUE · EV ${pct(roi)}: non puntare`; }
+}
+
+/* =========================================================
+   TRACKER
+   ========================================================= */
+let bets = store.get(K.bets, []);
+if (!Array.isArray(bets)) bets = [];
+const RES = { pending: ['In corso', 'text-cyan'], won: ['Vinta', 'text-up'], lost: ['Persa', 'text-down'], void: ['Rimborsata', 'text-term-mute'], half_won: ['½ Vinta', 'text-up'], half_lost: ['½ Persa', 'text-down'] };
+
+function profit(b) {
+  const s = +b.stake, o = +b.odds;
+  switch (b.res) {
+    case 'won': return s * (o - 1);
+    case 'lost': return -s;
+    case 'half_won': return s / 2 * (o - 1);
+    case 'half_lost': return -s / 2;
+    default: return 0;
+  }
+}
+function saveBets() { if (!store.set(K.bets, bets)) toast('Impossibile salvare: localStorage non disponibile', 'err'); }
+
+function addBet(ev, market, odds, stake) {
+  odds = num(odds); stake = num(stake);
+  if (!ev.trim() || !(odds > 1) || !(stake > 0)) { toast('Compila evento, quota (>1) e stake (>0)', 'err'); return false; }
+  bets.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: new Date().toISOString(), ev: ev.trim(), mkt: (market || '').trim(), odds, stake, res: 'pending' });
+  saveBets(); renderBets(); toast('Scommessa registrata', 'ok'); return true;
+}
+
+function renderBets() {
+  const settled = bets.filter(b => b.res !== 'pending');
+  const decided = bets.filter(b => ['won', 'lost', 'half_won', 'half_lost'].includes(b.res));
+  const staked = settled.reduce((a, b) => a + (+b.stake), 0);
+  const net = settled.reduce((a, b) => a + profit(b), 0);
+  const won = decided.filter(b => b.res === 'won' || b.res === 'half_won').length;
+  const roi = staked > 0 ? net / staked * 100 : 0;
+  const wr = decided.length ? won / decided.length * 100 : 0;
+  const open = bets.filter(b => b.res === 'pending');
+  const exposure = open.reduce((a, b) => a + (+b.stake), 0);
+  const avgOdds = bets.length ? bets.reduce((a, b) => a + (+b.odds), 0) / bets.length : 0;
+
+  const col = (v) => v > 0 ? 'text-up' : v < 0 ? 'text-down' : '';
+  $('#kNet').className = 'mono text-xl font-bold ' + col(net); $('#kNet').textContent = (net > 0 ? '+' : '') + eur(net);
+  $('#kRoi').className = 'mono text-xl font-bold ' + col(roi); $('#kRoi').textContent = (roi > 0 ? '+' : '') + pct(roi);
+  $('#kWin').textContent = pct(wr, 1);
+
+  const st = [['Totali', bets.length], ['Aperte', open.length], ['Esposizione', eur(exposure)], ['Puntato', eur(staked)], ['Quota media', fx(avgOdds, 2)], ['V / P', `${won} / ${decided.length - won}`]];
+  $('#trkStats').innerHTML = st.map(([l, v]) => `<div class="bg-term-bg border border-term-line rounded-lg p-2"><div class="text-[10px] text-term-mute uppercase">${l}</div><div class="font-bold mt-0.5 truncate">${v}</div></div>`).join('');
+
+  if (!bets.length) { $('#betList').innerHTML = `<div class="text-center text-term-mute text-sm py-8"><i class="fa-solid fa-receipt text-2xl mb-2 block opacity-60"></i>Nessuna scommessa registrata.</div>`; return; }
+  $('#betList').innerHTML = bets.map(b => {
+    const p = profit(b), r = RES[b.res] || RES.pending, d = new Date(b.date);
+    return `
+    <div class="bg-term-bg border border-term-line rounded-lg p-3" data-bid="${esc(b.id)}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div class="font-semibold text-sm truncate">${esc(b.ev)}</div>
+          <div class="text-xs text-term-mute truncate">${esc(b.mkt || '—')} · <span class="mono">${d.toLocaleDateString('it-IT')} ${hm(d)}</span></div>
+        </div>
+        <button class="bdel text-term-mute hover:text-down w-8 h-8 shrink-0" aria-label="Elimina"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="flex items-center gap-3 mt-2 flex-wrap">
+        <span class="mono text-xs"><span class="text-term-mute">@</span>${fx(b.odds, 2)}</span>
+        <span class="mono text-xs"><span class="text-term-mute">stake</span> ${eur(+b.stake)}</span>
+        <select class="bres inp !py-1.5 !text-xs !w-auto ${r[1]}" aria-label="Esito">
+          ${Object.entries(RES).map(([k, v]) => `<option value="${k}" ${k === b.res ? 'selected' : ''}>${v[0]}</option>`).join('')}
+        </select>
+        <span class="mono text-sm font-bold ml-auto ${col(p)}">${b.res === 'pending' ? '<span class="text-term-mute text-xs">pot. +' + eur(b.stake * (b.odds - 1)) + '</span>' : (p > 0 ? '+' : '') + eur(p)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportCSV() {
+  if (!bets.length) { toast('Nessun dato da esportare', 'warn'); return; }
+  const h = ['Data', 'Evento', 'Mercato', 'Quota', 'Stake', 'Esito', 'Utile'];
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = bets.map(b => [new Date(b.date).toLocaleString('it-IT'), b.ev, b.mkt, String(b.odds).replace('.', ','), String(b.stake).replace('.', ','), RES[b.res]?.[0] || b.res, profit(b).toFixed(2).replace('.', ',')].map(q).join(';'));
+  const blob = new Blob(['﻿' + [h.map(q).join(';'), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `goalvalue-tracker-${ymd(new Date())}.csv` });
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* =========================================================
+   CONFIG UI
+   ========================================================= */
+function refreshKeyBadge() {
+  const k = store.get(K.key, '');
+  const b = $('#keyBadge');
+  b.textContent = k ? 'CHIAVE SALVATA' : 'NESSUNA CHIAVE';
+  b.className = 'chip ' + (k ? 'text-up' : 'text-amber');
+}
+function setCfgOpen(open) {
+  $('#cfgBody').classList.toggle('hidden', !open);
+  $('#cfgChevron').style.transform = open ? 'rotate(180deg)' : '';
+  $('#cfgToggle').setAttribute('aria-expanded', open);
+  store.set(K.cfgOpen, open);
+}
+function cfgMsg(html, cls = 'text-term-mute') { const el = $('#cfgMsg'); el.className = 'mt-3 text-xs mono min-h-[1rem] ' + cls; el.innerHTML = html; }
+
+function persistProxyCfg() {
+  store.set(K.proxy, $('#proxyMode').value);
+  store.set(K.custom, $('#customProxy').value.trim());
+}
+
+/* =========================================================
+   INIT
+   ========================================================= */
+function init() {
+  // config
+  $('#apiKey').value = store.get(K.key, '');
+  $('#proxyMode').value = store.get(K.proxy, 'auto');
+  $('#customProxy').value = store.get(K.custom, '');
+  refreshKeyBadge();
+  setCfgOpen(store.get(K.cfgOpen, !store.get(K.key, '')));
+  $('#cfgToggle').onclick = () => setCfgOpen($('#cfgBody').classList.contains('hidden'));
+  $('#keyEye').onclick = () => { const i = $('#apiKey'); i.type = i.type === 'password' ? 'text' : 'password'; $('#keyEye i').className = 'fa-solid ' + (i.type === 'password' ? 'fa-eye' : 'fa-eye-slash'); };
+  $('#proxyMode').onchange = persistProxyCfg;
+  $('#customProxy').onchange = persistProxyCfg;
+
+  $('#btnTest').onclick = async () => {
+    const k = $('#apiKey').value.trim();
+    if (!k) { cfgMsg('<i class="fa-solid fa-xmark"></i> Inserisci una chiave da testare.', 'text-down'); return; }
+    persistProxyCfg();
+    const btn = $('#btnTest'); btn.disabled = true;
+    cfgMsg('<i class="fa-solid fa-circle-notch fa-spin"></i> Test in corso…');
+    const t0 = performance.now();
+    try {
+      const { data, via } = await apiGet('/competitions/SA', k);
+      cfgMsg(`<i class="fa-solid fa-check"></i> Chiave valida · via ${esc(via)} · ${Math.round(performance.now() - t0)} ms · ${esc(data.name || 'OK')}${rateLeft !== null ? ' · richieste/min disponibili: ' + esc(rateLeft) : ''}`, 'text-up');
+    } catch (e) {
+      cfgMsg(`<i class="fa-solid fa-xmark"></i> ${esc(e.message)}`, 'text-down');
+    } finally { btn.disabled = false; }
+  };
+  $('#btnSave').onclick = () => {
+    const k = $('#apiKey').value.trim();
+    if (!k) { cfgMsg('<i class="fa-solid fa-xmark"></i> Chiave vuota.', 'text-down'); return; }
+    persistProxyCfg();
+    if (!store.set(K.key, k)) { cfgMsg('localStorage non disponibile in questo browser.', 'text-down'); return; }
+    S.standings = {};
+    refreshKeyBadge(); cfgMsg('<i class="fa-solid fa-check"></i> Configurazione salvata. Carico le partite…', 'text-up');
+    setCfgOpen(false); loadMatches(true);
+  };
+  $('#btnClear').onclick = () => {
+    if (!confirm('Rimuovere la chiave API salvata?')) return;
+    store.del(K.key); store.del(K.lastProxy); $('#apiKey').value = '';
+    refreshKeyBadge(); cfgMsg('Chiave rimossa.'); loadMatches();
+  };
+
+  // radar
+  $('#btnRefresh').onclick = () => loadMatches(true);
+  $('#filters').onclick = (e) => {
+    const b = e.target.closest('.fbtn'); if (!b) return;
+    S.filter = b.dataset.f;
+    $$('.fbtn').forEach(x => x.classList.toggle('text-cyan', x === b));
+    $$('.fbtn').forEach(x => x.classList.toggle('text-term-mute', x !== b));
+    renderRadar();
+  };
+  $('#search').oninput = (e) => { S.q = e.target.value; renderRadar(); };
+  $('#radar').onclick = (e) => { const c = e.target.closest('.match'); if (c) selectMatch(+c.dataset.id); };
+  $('#radar').onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('match')) { e.preventDefault(); selectMatch(+e.target.dataset.id); } };
+
+  // scout → calcolatore
+  $('#scout').onclick = (e) => {
+    const b = e.target.closest('.mkt'); if (!b || b.disabled) return;
+    C.ev.value = `${b.dataset.ev} · ${b.dataset.mkt}`;
+    C.prob.value = b.dataset.p;
+    calc();
+    $('#calcPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => C.odds.focus({ preventScroll: true }), 400);
+    toast('Probabilità inviata: inserisci la quota del book', 'info');
+  };
+
+  // calcolatore
+  const sc = store.get(K.calc, null);
+  if (sc) { C.ev.value = sc.ev || ''; C.odds.value = sc.odds ?? '2.10'; C.prob.value = sc.prob ?? '52'; C.bank.value = sc.bank ?? '1000'; C.frac.value = sc.frac ?? '0.25'; }
+  Object.values(C).forEach(el => el.addEventListener('input', calc));
+  $('#calcReset').onclick = () => { C.ev.value = ''; C.odds.value = '2.10'; C.prob.value = '52'; C.frac.value = '0.25'; calc(); };
+  $('#calcToTracker').onclick = () => {
+    if (!(lastStake > 0)) { toast('Stake Kelly nullo: nessun valore da registrare', 'warn'); return; }
+    const parts = C.ev.value.split(' · ');
+    addBet(parts[0] || 'Evento', parts.slice(1).join(' · '), C.odds.value, lastStake.toFixed(2));
+  };
+  calc();
+
+  // tracker
+  $('#betForm').onsubmit = (e) => {
+    e.preventDefault();
+    if (addBet($('#bEvent').value, $('#bMarket').value, $('#bOdds').value, $('#bStake').value)) e.target.reset();
+  };
+  $('#betList').onchange = (e) => {
+    if (!e.target.classList.contains('bres')) return;
+    const id = e.target.closest('[data-bid]').dataset.bid;
+    const b = bets.find(x => x.id === id); if (!b) return;
+    b.res = e.target.value; saveBets(); renderBets();
+  };
+  $('#betList').onclick = (e) => {
+    if (!e.target.closest('.bdel')) return;
+    const id = e.target.closest('[data-bid]').dataset.bid;
+    if (!confirm('Eliminare questa scommessa?')) return;
+    bets = bets.filter(x => x.id !== id); saveBets(); renderBets();
+  };
+  $('#btnExport').onclick = exportCSV;
+  $('#btnWipe').onclick = () => { if (bets.length && confirm('Cancellare TUTTO lo storico scommesse?')) { bets = []; saveBets(); renderBets(); } };
+  window.addEventListener('storage', (e) => { if (e.key === K.bets) { bets = store.get(K.bets, []); renderBets(); } });
+  renderBets();
+
+  // clock + auto-refresh (in pausa quando la scheda è nascosta)
+  setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('it-IT'); }, 1000);
+  let since = 0;
+  setInterval(() => {
+    if (document.hidden || !$('#autoRefresh').checked) return;
+    if (++since >= 60) { since = 0; loadMatches(); }
+  }, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && since >= 60) { since = 0; loadMatches(); } });
+  window.addEventListener('online', () => loadMatches());
+  window.addEventListener('offline', () => setNet('OFFLINE', 'down'));
+
+  loadMatches();
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
