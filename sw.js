@@ -1,5 +1,5 @@
 // Service worker GoalValue: guscio dell'app in cache, dati API sempre dalla rete
-const CACHE = 'goalvalue-v2';
+const CACHE = 'goalvalue-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

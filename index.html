@@ -125,6 +125,18 @@ if (window.tailwind) tailwind.config = {
         <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener" class="btn btn-sec text-term-mute"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ottieni chiave gratuita</a>
       </div>
       <div id="cfgMsg" class="mt-3 text-xs mono text-term-mute min-h-[1rem]"></div>
+      <div class="mt-4 pt-4 border-t border-term-line grid gap-3 md:grid-cols-12 items-end">
+        <div class="md:col-span-6">
+          <label class="lbl" for="oddsKey">Quote bookmaker · API Key the-odds-api.com</label>
+          <input id="oddsKey" type="password" class="inp" placeholder="Chiave gratuita (500 crediti/mese)" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="md:col-span-6 flex flex-wrap gap-2">
+          <button id="oddsTest" class="btn btn-sec"><i class="fa-solid fa-plug-circle-check"></i> Testa</button>
+          <button id="oddsSave" class="btn btn-pri"><i class="fa-solid fa-floppy-disk"></i> Salva</button>
+          <a href="https://the-odds-api.com/#get-access" target="_blank" rel="noopener" class="btn btn-sec text-term-mute"><i class="fa-solid fa-arrow-up-right-from-square"></i> Chiave gratuita</a>
+        </div>
+        <div id="oddsMsg" class="md:col-span-12 text-xs mono text-term-mute min-h-[1rem]"></div>
+      </div>
       <p class="mt-2 text-[11px] text-term-mute leading-relaxed">
         <i class="fa-solid fa-circle-info"></i> La chiave resta solo nel <span class="mono">localStorage</span> di questo browser. Da GitHub Pages la chiamata diretta e corsproxy.io (gratuito solo su localhost) vengono bloccate dal CORS: usa il tuo proxy Cloudflare Worker (file <span class="mono">cloudflare-worker.js</span> nel repo). In modalità Auto l'app prova prima il tuo proxy, poi la chiamata diretta, poi corsproxy.io. I proxy "solo GET" come allorigins.win non inoltrano l'header <span class="mono">X-Auth-Token</span> e quindi non sono utilizzabili per le chiamate autenticate. Se nulla risponde, l'app passa ai dati DEMO senza bloccarsi.
       </p>
@@ -297,7 +309,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
-const K = { key: 'gv_api_key', proxy: 'gv_proxy_mode', custom: 'gv_custom_proxy', lastProxy: 'gv_last_proxy', bets: 'gv_bets', calc: 'gv_calc', cfgOpen: 'gv_cfg_open', picks: 'gv_picks' };
+const K = { key: 'gv_api_key', proxy: 'gv_proxy_mode', custom: 'gv_custom_proxy', lastProxy: 'gv_last_proxy', bets: 'gv_bets', calc: 'gv_calc', cfgOpen: 'gv_cfg_open', picks: 'gv_picks', odds: 'gv_odds_key', oddsCache: 'gv_odds_cache' };
 
 let toastT;
 function toast(msg, type = 'info') {
@@ -396,8 +408,8 @@ function normMatch(m) {
     status: m.status,
     minute: m.minute ?? null,
     injury: m.injuryTime ?? null,
-    home: { id: m.homeTeam?.id, name: m.homeTeam?.shortName || m.homeTeam?.name || 'Casa', crest: m.homeTeam?.crest || '' },
-    away: { id: m.awayTeam?.id, name: m.awayTeam?.shortName || m.awayTeam?.name || 'Ospite', crest: m.awayTeam?.crest || '' },
+    home: { id: m.homeTeam?.id, full: m.homeTeam?.name || '', name: m.homeTeam?.shortName || m.homeTeam?.name || 'Casa', crest: m.homeTeam?.crest || '' },
+    away: { id: m.awayTeam?.id, full: m.awayTeam?.name || '', name: m.awayTeam?.shortName || m.awayTeam?.name || 'Ospite', crest: m.awayTeam?.crest || '' },
     sh: ft.home ?? null, sa: ft.away ?? null,
     hh: ht.home ?? null, ha: ht.away ?? null,
     demo: !!m._demo
@@ -756,6 +768,83 @@ function marketsOf(r, m) {
 const best = (arr) => arr.reduce((a, b) => b.p > a.p ? b : a);
 const confOf = (r) => !r.hasData ? ['Bassa', 'text-down'] : (r.h.pj + r.a.pj >= 12 ? ['Alta', 'text-up'] : ['Media', 'text-amber']);
 
+/* ---------- QUOTE BOOKMAKER (the-odds-api.com v4) ---------- */
+const ODDS_BASE = 'https://api.the-odds-api.com/v4';
+const SPORT_MAP = { SA: 'soccer_italy_serie_a', PL: 'soccer_epl', PD: 'soccer_spain_la_liga', BL1: 'soccer_germany_bundesliga',
+  FL1: 'soccer_france_ligue_one', CL: 'soccer_uefa_champs_league', DED: 'soccer_netherlands_eredivisie', PPL: 'soccer_portugal_primeira_liga',
+  ELC: 'soccer_efl_champ', BSA: 'soccer_brazil_campeonato', EC: 'soccer_uefa_european_championship', WC: 'soccer_fifa_world_cup' };
+let oddsLeft = null;
+
+async function oddsGet(path, key = store.get(K.odds, '')) {
+  if (!key) throw new ApiError('Chiave quote mancante', 0, true);
+  const target = `${ODDS_BASE}${path}${path.includes('?') ? '&' : '?'}apiKey=${encodeURIComponent(key)}`;
+  const routes = [['Diretto', target]];
+  const px = PROXIES.custom.build(target); if (px) routes.push(['Proxy custom', px]);
+  let last = '';
+  for (const [via, url] of routes) {
+    try {
+      const res = await fetchTimeout(url, { cache: 'no-store' });
+      const rem = res.headers.get('x-requests-remaining'); if (rem !== null) oddsLeft = rem;
+      if (res.ok) return { data: await res.json(), via };
+      let msg = ''; try { msg = (await res.json()).message || ''; } catch {}
+      if (res.status === 401) throw new ApiError(msg || 'Chiave quote non valida', 401, true);
+      if (res.status === 429) throw new ApiError('Crediti mensili delle quote esauriti', 429, true);
+      if (res.status === 422) throw new ApiError(msg || 'Competizione non disponibile', 422, true);
+      last = `${via}: HTTP ${res.status}`;
+    } catch (e) {
+      if (e instanceof ApiError && e.fatal) throw e;
+      last = `${via}: ${e.name === 'AbortError' ? 'timeout' : 'rete/CORS'}`;
+    }
+  }
+  throw new ApiError('Quote non raggiungibili · ' + last, 0, false);
+}
+
+// Cache 10 minuti per competizione: ogni chiamata costa 2 crediti (h2h + totals, regione EU)
+async function oddsForSport(sport) {
+  const cache = store.get(K.oddsCache, {}) || {};
+  const c = cache[sport];
+  if (c && Date.now() - c.t < 10 * 60000) return c.data;
+  const { data } = await oddsGet(`/sports/${sport}/odds?regions=eu&markets=h2h,totals&oddsFormat=decimal&dateFormat=iso`);
+  cache[sport] = { t: Date.now(), data };
+  Object.keys(cache).forEach(k => { if (Date.now() - cache[k].t > 3600000) delete cache[k]; });
+  store.set(K.oddsCache, cache);
+  return data;
+}
+
+const STOP = new Set(['fc', 'cf', 'ac', 'as', 'ssc', 'sc', 'afc', 'calcio', 'club', 'de', 'del', 'cd', 'ud', 'rc', 'sv', 'vfb', 'vfl', 'tsg', 'bc', 'us', 'ss', 'the', 'and', 'city', 'united', 'utd', 'town', 'sport', 'sporting']);
+const toks = (...names) => new Set(names.join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w)));
+const overlap = (a, b) => [...a].some(w => b.has(w) || [...b].some(x => x.length >= 4 && w.length >= 4 && (x.startsWith(w) || w.startsWith(x))));
+
+function findEvent(m, events) {
+  const th = toks(m.home.name, m.home.full), ta = toks(m.away.name, m.away.full), t0 = new Date(m.utc).getTime();
+  let bestEv = null, bestScore = 0;
+  for (const ev of events || []) {
+    const dt = Math.abs(new Date(ev.commence_time).getTime() - t0) / 60000;
+    const sh = overlap(th, toks(ev.home_team)), sa = overlap(ta, toks(ev.away_team));
+    const score = (sh ? 2 : 0) + (sa ? 2 : 0) + (dt <= 20 ? 1 : 0);
+    if ((sh && sa) || ((sh || sa) && dt <= 20)) if (score > bestScore) { bestScore = score; bestEv = ev; }
+  }
+  return bestEv;
+}
+
+// Migliore quota disponibile per ogni mercato del modello
+function bestOdds(ev) {
+  const out = {};
+  const put = (k, price, bk) => { if (!(price > 1)) return; const o = out[k] ||= { price: 0, bk: '', n: 0, sum: 0 }; o.n++; o.sum += price; if (price > o.price) { o.price = price; o.bk = bk; } };
+  for (const b of ev.bookmakers || []) for (const mk of b.markets || []) for (const o of mk.outcomes || []) {
+    if (mk.key === 'h2h') put(o.name === ev.home_team ? '1' : o.name === ev.away_team ? '2' : o.name === 'Draw' ? 'X' : '', o.price, b.title);
+    else if (mk.key === 'totals' && [1.5, 2.5, 3.5].includes(+o.point)) put((o.name === 'Over' ? 'O' : 'U') + o.point, o.price, b.title);
+  }
+  // probabilità "di mercato" senza margine (media delle quote, normalizzata per gruppo)
+  for (const grp of [['1', 'X', '2'], ['O1.5', 'U1.5'], ['O2.5', 'U2.5'], ['O3.5', 'U3.5']]) {
+    if (!grp.every(k => out[k])) continue;
+    const imp = grp.map(k => out[k].n / out[k].sum), tot = imp.reduce((a, b) => a + b, 0);
+    grp.forEach((k, i) => { out[k].mkt = imp[i] / tot; });
+  }
+  return out;
+}
+
 let tipsData = [];
 async function generateTips() {
   const sel = S.matches.filter(m => S.picks.has(m.id));
@@ -763,6 +852,15 @@ async function generateTips() {
   const btn = $('#tipsGo'); btn.disabled = true;
   $('#tips').innerHTML = `<div class="py-8 text-center text-term-mute mono text-sm"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Analizzo ${sel.length} partite…</div>`;
   tipsData = [];
+  // quote: una chiamata per competizione
+  const oddsByComp = {}; let oddsErr = '';
+  if (store.get(K.odds, '')) {
+    for (const code of [...new Set(sel.filter(m => !m.demo).map(m => m.compCode))]) {
+      if (!SPORT_MAP[code]) continue;
+      try { oddsByComp[code] = await oddsForSport(SPORT_MAP[code]); }
+      catch (e) { oddsErr = e.message; if (e.status === 401 || e.status === 429) break; }
+    }
+  }
   for (const m of sel) {
     const table = m.demo ? demoTable(m) : await getStandings(m); // una sola richiesta per competizione (cache)
     const r = model(m, table);
@@ -770,15 +868,23 @@ async function generateTips() {
     const all = marketsOf(r, m), open = all.filter(x => x.p < 0.995);
     const mk = open.length ? open : all;
     const pickOf = (arr) => best(arr.length ? arr : mk);
+    const ev = oddsByComp[m.compCode] ? findEvent(m, oddsByComp[m.compCode]) : null;
+    const bo = ev ? bestOdds(ev) : {};
+    // con le quote disponibili la stima fonde modello (40%) e mercato senza margine (60%): meno falsi value
+    const withOdds = (x) => { const book = bo[x.k] || null; return book?.mkt ? { ...x, pm: x.p, p: 0.6 * book.mkt + 0.4 * x.p, book } : { ...x, book }; };
     const picks = [
-      { t: 'Esito secco', ...pickOf(mk.filter(x => x.g === 'esito')) },
-      { t: 'Mercato gol', ...pickOf(mk.filter(x => x.g === 'gol' && x.k !== 'O1.5' && x.k !== 'U3.5')) },
-      { t: 'Più sicuro', ...pickOf(mk) }
+      { t: 'Esito secco', ...withOdds(pickOf(mk.filter(x => x.g === 'esito'))) },
+      { t: 'Mercato gol', ...withOdds(pickOf(mk.filter(x => x.g === 'gol' && x.k !== 'O1.5' && x.k !== 'U3.5'))) },
+      { t: 'Più sicuro', ...withOdds(pickOf(mk)) }
     ];
-    tipsData.push({ m, r, picks });
+    // value bet: mercato con EV più alto sulla quota migliore (soglia +3% e probabilità ≥ 25%)
+    const vb = mk.map(withOdds).filter(x => x.book && x.p >= 0.25).map(x => ({ ...x, ev: x.p * x.book.price - 1 })).sort((a, b) => b.ev - a.ev)[0];
+    if (vb && vb.ev >= 0.03 && vb.ev <= 0.30) picks.unshift({ t: 'Value bet', vb: true, ...vb });
+    tipsData.push({ m, r, picks, odds: !!ev });
   }
+  S.oddsErr = oddsErr;
   // ordina per fiducia: probabilità dell'esito secco più forte
-  tipsData.sort((a, b) => b.picks[0].p - a.picks[0].p);
+  tipsData.sort((a, b) => (b.picks[0].vb ? 1 : 0) - (a.picks[0].vb ? 1 : 0) || b.picks[0].p - a.picks[0].p);
   btn.disabled = false;
   renderTips();
 }
@@ -787,15 +893,21 @@ function renderTips() {
   if (!tipsData.length) return;
   const bank = num(C.bank.value) || 0, frac = num(C.frac.value) || 0.25;
   const open = tipsData.filter(t => !t.r.fin);
-  const multi = open.reduce((a, t) => a * t.picks[2].p, 1);
-  $('#tips').innerHTML = `
+  const safe = (t) => t.picks.find(p => p.t === 'Più sicuro');
+  const multi = open.reduce((a, t) => a * safe(t).p, 1);
+  const hasKey = !!store.get(K.odds, ''), nVal = tipsData.filter(t => t.picks[0].vb).length, nOdds = tipsData.filter(t => t.odds).length;
+  const oddsBar = !hasKey
+    ? `<div class="mb-3 rounded-lg border border-term-line p-3 text-xs text-term-mute"><i class="fa-solid fa-circle-info"></i> Aggiungi la chiave gratuita di the-odds-api.com in Configurazione API per avere le quote dei bookmaker in automatico.</div>`
+    : `<div class="mb-3 rounded-lg border ${nVal ? 'border-up/40 bg-up/10 text-up' : 'border-term-line text-term-mute'} p-3 text-xs mono">
+        <i class="fa-solid fa-scale-balanced"></i> Quote trovate per ${nOdds}/${tipsData.length} partite · <b>${nVal} value bet</b>${oddsLeft !== null ? ` · crediti quote rimasti: ${esc(oddsLeft)}` : ''}${S.oddsErr ? `<div class="text-amber mt-1">${esc(S.oddsErr)}</div>` : ''}</div>`;
+  $('#tips').innerHTML = oddsBar + `
     ${open.length > 1 ? `<div class="mb-4 rounded-lg border border-amber/40 bg-amber/10 p-3 text-xs text-amber leading-relaxed">
       <i class="fa-solid fa-triangle-exclamation"></i> Multipla dei ${open.length} pronostici "più sicuri": probabilità combinata <b class="mono">${pct(multi * 100, 1)}</b> (quota fair <span class="mono">${multi > 0 ? fx(1 / multi, 2) : '—'}</span>). Ogni evento in più moltiplica anche il margine del bookmaker: le singole con valore rendono di più nel lungo periodo.</div>` : ''}
-    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
     ${tipsData.map((t, i) => {
       const { m, r } = t, conf = confOf(r);
       return `
-      <div class="bg-term-bg border border-term-line rounded-xl p-3" data-ti="${i}">
+      <div class="bg-term-bg border border-term-line rounded-xl p-3 min-w-0" data-ti="${i}">
         <div class="flex items-start justify-between gap-2 mb-2">
           <div class="min-w-0">
             <div class="text-[10px] text-term-mute uppercase tracking-wider truncate">${esc(m.comp)} · ${hm(new Date(m.utc))}</div>
@@ -804,21 +916,23 @@ function renderTips() {
           <div class="flex flex-col items-end gap-1 shrink-0">${statusChip(m)}<span class="text-[10px] mono ${conf[1]}">fiducia ${conf[0]}</span></div>
         </div>
         ${r.fin ? `<div class="text-xs text-term-mute mono">Partita terminata: pronostico non più giocabile.</div>` : t.picks.map((p, j) => `
-          <div class="border-t border-term-line pt-2 mt-2" data-pj="${j}">
+          <div class="${p.vb ? 'border border-up/40 bg-up/5 rounded-lg px-2 pb-2' : 'border-t border-term-line'} pt-2 mt-2" data-pj="${j}">
             <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0"><div class="text-[10px] text-term-mute uppercase">${p.t}</div><div class="text-sm font-semibold truncate">${esc(p.l)}</div></div>
-              <div class="text-right shrink-0 mono"><div class="font-bold">${pct(p.p * 100, 1)}</div><div class="text-[10px] text-term-mute">fair ${fx(1 / p.p, 2)}</div></div>
+              <div class="min-w-0"><div class="text-[10px] uppercase ${p.vb ? 'text-up font-bold' : 'text-term-mute'}">${p.vb ? '<i class="fa-solid fa-gem"></i> ' : ''}${p.t}</div><div class="text-sm font-semibold truncate">${esc(p.l)}</div></div>
+              <div class="text-right shrink-0 mono"><div class="font-bold">${pct(p.p * 100, 1)}</div><div class="text-[10px] text-term-mute">fair ${fx(1 / p.p, 2)}</div>${p.pm !== undefined ? `<div class="text-[9px] text-term-mute">modello ${pct(p.pm * 100, 0)}</div>` : ''}</div>
             </div>
             <div class="flex items-center gap-2 mt-1.5">
-              <input type="number" inputmode="decimal" step="0.01" min="1.01" class="inp tq !py-1.5 !text-sm !w-28" placeholder="quota">
+              <input type="number" inputmode="decimal" step="0.01" min="1.01" class="inp tq !py-1.5 !text-sm !w-28" placeholder="quota" value="${p.book ? p.book.price.toFixed(2) : ''}">
               <span class="tev text-xs mono flex-1 min-w-0 truncate text-term-mute">inserisci la quota</span>
               <button hidden class="tadd btn btn-ok !min-h-[34px] !px-2.5 text-xs" aria-label="Aggiungi al tracker"><i class="fa-solid fa-plus"></i></button>
             </div>
+            ${p.book ? `<div class="text-[10px] text-term-mute mono mt-1 truncate">migliore: ${esc(p.book.bk)} · media ${fx(p.book.sum / p.book.n, 2)} su ${p.book.n} book</div>` : ''}
           </div>`).join('')}
       </div>`;
     }).join('')}
     </div>
-    <p class="text-[10px] text-term-mute mono mt-3 leading-relaxed">Bankroll ${eur(bank)} · stake con Kelly ×${fx(frac, 3)} (dal calcolatore). Si punta solo se la quota del book supera la quota fair: è lì che c'è valore.</p>`;
+    <p class="text-[10px] text-term-mute mono mt-3 leading-relaxed">Bankroll ${eur(bank)} · stake con Kelly ×${fx(frac, 3)} (dal calcolatore). Si punta solo se la quota del book supera la quota fair: è lì che c'è valore. Quote: bookmaker europei via the-odds-api.com, verifica sempre la quota sul tuo book prima di giocare.</p>`;
+  $$('#tips [data-pj]').forEach(row => { if (row.querySelector('.tq').value) tipEval(row.closest('[data-ti]'), row); });
 }
 
 function tipEval(card, row) {
@@ -987,6 +1101,24 @@ function init() {
   setCfgOpen(store.get(K.cfgOpen, !store.get(K.key, '')));
   $('#cfgToggle').onclick = () => setCfgOpen($('#cfgBody').classList.contains('hidden'));
   $('#keyEye').onclick = () => { const i = $('#apiKey'); i.type = i.type === 'password' ? 'text' : 'password'; $('#keyEye i').className = 'fa-solid ' + (i.type === 'password' ? 'fa-eye' : 'fa-eye-slash'); };
+  $('#oddsKey').value = store.get(K.odds, '');
+  const oddsMsg = (h, c = 'text-term-mute') => { const el = $('#oddsMsg'); el.className = 'md:col-span-12 text-xs mono min-h-[1rem] ' + c; el.innerHTML = h; };
+  $('#oddsTest').onclick = async () => {
+    const k = $('#oddsKey').value.trim();
+    if (!k) { oddsMsg('<i class="fa-solid fa-xmark"></i> Inserisci la chiave delle quote.', 'text-down'); return; }
+    persistProxyCfg(); oddsMsg('<i class="fa-solid fa-circle-notch fa-spin"></i> Test in corso…');
+    try {
+      const { data, via } = await oddsGet('/sports', k); // non consuma crediti
+      const n = (data || []).filter(x => x.group === 'Soccer' && x.active).length;
+      oddsMsg(`<i class="fa-solid fa-check"></i> Chiave quote valida · via ${esc(via)} · ${n} competizioni di calcio attive${oddsLeft !== null ? ' · crediti rimasti: ' + esc(oddsLeft) : ''}`, 'text-up');
+    } catch (e) { oddsMsg(`<i class="fa-solid fa-xmark"></i> ${esc(e.message)}`, 'text-down'); }
+  };
+  $('#oddsSave').onclick = () => {
+    const k = $('#oddsKey').value.trim();
+    k ? store.set(K.odds, k) : store.del(K.odds);
+    store.del(K.oddsCache);
+    oddsMsg(k ? '<i class="fa-solid fa-check"></i> Chiave quote salvata. Premi Genera nei Pronostici.' : 'Chiave quote rimossa.', k ? 'text-up' : 'text-term-mute');
+  };
   $('#proxyMode').onchange = persistProxyCfg;
   $('#customProxy').onchange = persistProxyCfg;
 

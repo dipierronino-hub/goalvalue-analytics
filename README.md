@@ -16,3 +16,7 @@ football-data.org non accetta chiamate dal browser su domini pubblici. Pubblica 
 ```
 https://<nome-worker>.<account>.workers.dev/?url={url}
 ```
+
+## Quote bookmaker
+
+Le quote arrivano da [the-odds-api.com](https://the-odds-api.com) (piano gratuito: 500 crediti/mese, regione EU, mercati 1X2 e Over/Under). Ogni competizione costa 2 crediti ed è in cache per 10 minuti. La chiave si inserisce in Configurazione API.
